@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="www.dream.bbs.user.mapper.UserMapper">
+	<resultMap id="rmUserVO" type="www.dream.bbs.user.model.UserVO">
+		<result property="id" column="id" />
+		<result property="accountType" column="account_type" />
+		<result property="name" column="name" />
+		<result property="nick" column="nick" />
+		<result property="pwd" column="pwd" />
+		<result property="birth" column="birth" />
+		<result property="sex" column="sex" />
+		<result property="address" column="address" />
+		<result property="email" column="email" />
+		<result property="penalty" column="penalty" />
+		<result property="active" column="active" />
+	</resultMap>
+
+	<resultMap id="rmReportVO" type="www.dream.bbs.user.model.ReportVO">
+		<result property="replyId" column="reply_id" />
+		<result property="reporterId" column="reporter_id" />
+		<result property="reportedId" column="reported_id" />
+		<result property="content" column="content" />
+		<result property="checked" column="checked" />
+		<result property="cnt" column="cnt" />
+	</resultMap>
+
+	<resultMap id="rmRecentMovieVO" type="www.dream.bbs.user.model.RecentMovieVO">
+		<result property="userId" column="user_id" />
+		<result property="movieId" column="movie_id" />
+		<result property="movieTitle" column="movie_title" />
+		<result property="movieRuntime" column="movie_runtime" />
+		<result property="viewTime" column="view_time" />
+		<result property="regDt" column="reg_dt" />
+		<result property="uptDt" column="upt_dt" />
+	</resultMap>
+
+	<!-- public List<UserVO> listAllMember(); -->
+	<select id="listAllMember" resultMap="rmUserVO">
+		select u.*
+		  from T_user u
+		 where u.account_type = 'member'
+		   and u.active = True;
+	</select>
+
+	<!-- public List<ReportVO> listReported(); -->
+	<select id="listReported" resultMap="rmReportVO">
+		select r.reply_id, r.reported_id, r.content, count(*) cnt
+		  from T_report r 
+		 where r.checked = False
+	  group by reply_id;
+	</select>
+
+	<!-- public List<RecentMovieVO> listAllRecentMovies(String id); -->
+	<select id="listAllRecentMovies" resultMap="rmRecentMovieVO">
+		select r.*
+		  from t_recent_movie r
+		 where r.user_id = #{id}
+		 order BY (SELECT IF (r.upt_dt IS null, r.reg_dt, r.upt_dt)) DESC;
+	</select>
+
+	<!-- public List<String> listRecentMoviesGenre(String userId); -->
+	<select id="listRecentMoviesGenre" parameterType="map" resultType="java.lang.String">
+        SELECT p.genre
+          from t_reply p, (
+         			select r.movie_id
+         			  from t_recent_movie r
+         			 where r.user_id = #{id}
+         			) as i
+         where p.id = i.movie_id;
+    </select>
+
+	<!-- public UserVO findByNick(String nick); -->
+	<select id="findByNick" resultMap="rmUserVO">
+		SELECT p.*
+		  FROM T_user p 
+		 WHERE p.nick = #{nick}
+		   and p.active = true;
+	</select>
+
+	<!-- public boolean isValidNick(String nick); -->
+	<select id="isValidNick" resultType="boolean">
+		SELECT count(1) = 0 
+		  FROM T_user p 
+		 WHERE p.nick = binary(#{nick});
+	</select>
+
+	<!-- public List<UserVO> isNew(UserVO user); -->
+	<select id="isNew" resultMap="rmUserVO">
+		SELECT p.id
+		  FROM T_user p 
+		 WHERE p.email = #{email}
+		 LIMIT 1;
+	</select>
+
+	<!-- findRecentMovie(RecentMovieVO watching) -->
+	<select id="findRecentMovie" resultType="boolean">
+		SELECT count(1) = 0
+		  FROM T_recent_movie p 
+		 WHERE p.movie_id = #{movieId}
+		   and p.user_id = #{userId};
+	</select>
+
+	<!-- public int createUser(UserVO user); -->
+	<insert id="createUser">
+		<selectKey keyProperty="id" resultType="String" order="BEFORE">
+			select NEXT_PK('s_user')
+		</selectKey>
+		INSERT INTO T_user (id, account_type, name, nick, pwd, birth, sex, address, email)
+		VALUES (#{id}, 'member', #{name}, #{nick}, #{pwd}, #{birth}, #{sex}, #{address}, #{email});
+	</insert>
+
+	<!-- public int createRecentMovie(RecentMovieVO watching); -->
+	<insert id="createRecentMovie">
+		INSERT INTO T_recent_movie (user_id, movie_id, movie_title, movie_runtime, view_time)
+		VALUES (#{userId}, #{movieId}, #{movieTitle}, 3600000, #{viewTime}); <!-- 현재 영상 길이를 받는 기능이 없어 임시로 1시간으로 설정 -->
+	</insert>
+
+	<!-- public int rejoinUser(UserVO user); -->
+	<update id="rejoinUser">
+		update T_user
+		   set name = #{name},
+		   	   nick = #{nick},
+		   	   pwd = #{pwd},
+		   	   address = #{address},
+		   	   active = true
+		 where id = #{id};
+	</update>
+
+	<!-- public int updateMembership(UserVO user); -->
+	<update id="updateMembership">
+		update T_user
+		   set membership = #{membership}
+		 where id = #{id};
+	</update>
+
+	<!-- public int updatePenalty(UserVO user); -->
+	<update id="updatePenalty">
+		update T_user
+		   set penalty = #{penalty}
+		 where id = #{id};
+	</update>
+
+	<!-- public int givePenalty(String id); -->
+	<update id="givePenalty">
+		update T_user
+		   set penalty = penalty + 1
+		 where id = #{id};
+	</update>
+
+	<!-- public int checkReport(String id); -->
+	<update id="checkReport">
+		update T_report
+		   set checked = true
+		 where reply_id = #{id};
+	</update>
+
+	<!-- public int inactiveAccount(String id); -->
+	<update id="inactiveAccount">
+		update T_user
+		   set active = false,
+		   	   membership = '1900-01-01',
+		  	   nick = CONCAT('unuseableAccountOf', #{id}, 'IsNowInactivated')
+		 where id = #{id};
+	</update>
+
+	<!-- public int updateRecentMovie(RecentMovieVO watching); -->
+	<update id="updateRecentMovie">
+		update T_recent_movie
+		   set view_time = (select least(view_time + #{viewTime}, movie_runtime))
+		 WHERE movie_id = #{movieId}
+		   and user_id = #{userId};
+	</update>
+</mapper>

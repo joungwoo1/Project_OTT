@@ -1,0 +1,261 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+    
+<mapper namespace="www.dream.bbs.movie.mapper.MovieMapper">
+<resultMap id="rmMovieDTO" type="www.dream.bbs.movie.model.MovieDTO">
+		<result property="adult" column="adult"/>
+		<result property="id" column="id"/>
+		<result property="genreNames" column="genre_names"/>
+		<result property="title" column="title"/>
+		<result property="popularity" column="popularity"/>
+		<result property="releaseDate" column="release_date"/>
+		<result property="overview" column="overview"/>
+		<result property="voteAverage" column="vote_average"/>
+		<result property="voteCount" column="vote_count"/>
+	</resultMap>
+	
+		<!-- resultMap - 데이터베이스 결과데이터를 객체에 로드하는 방법을 정의하는 엘리먼트 -->
+	<resultMap id="rmMovieEvalVO" extends="nsEntity.rmMasterEntity"
+		type="www.dream.bbs.movie.model.MovieEvalVO">
+		<result property="content" column="content" />
+		<result property="starScore" column="star_Score" />
+		<!-- association – 복잡한 타입의 연관관계. 많은 결과는 타입으로 나타난다 -->
+		<!-- columnPrefix - 여러개의 테이블을 조인할때 ResultSet에서 칼럼명의 중복을 피하기 위해 칼럼별칭을 사용할 
+			수 있다. 칼럼을 외부 결과매핑에 매핑하기 위해 columnPrefix를 명시하자. -->
+		<!-- notNullColumn - 기본적으로 자식객체는 칼럼중 적어도 하나를 null이 아닌 자식객체의 프로퍼티에 매핑할때 
+			만들어진다. 이 속성을 사용해서 칼럼이 값을 가져야만 하는 것을 명시해서 행위를 변경할 수 있다. 디폴트값은 unset이다. -->
+		<!-- 회원 탈퇴 시 null 처리 -->
+		<association property="writer" columnPrefix="w_"
+			notNullColumn="id"
+			resultMap="www.dream.bbs.user.mapper.UserMapper.rmUserVO" />
+		<!-- discriminator – 사용할 resultMap 을 판단하기 위한 결과값을 사용 -->
+		<discriminator javaType="String" column="descrim">
+			<case value="movie" resultMap="rmMovieVO" />
+		</discriminator>
+	</resultMap>
+
+	<!-- extends - 확장하기(=상속) -->
+	<resultMap id="rmMovieVO" extends="rmMovieEvalVO"
+		type="www.dream.bbs.movie.model.MovieVO">
+		<result property="title" column="title" />
+		<result property="writerId" column="writer_id" />
+		<result property="readCnt" column="read_cnt" />
+		<result property="likeCnt" column="like_cnt" />
+		<result property="disCnt" column="dis_cnt" />
+		<result property="genre" column="genre" />
+		<result property="ageLimit" column="age_limit" />
+		<association property="boardVO" columnPrefix="bb_"
+			resultMap="www.dream.bbs.board.mapper.BoardMapper.rmBoardVO" />
+	</resultMap>
+	
+		<!-- public long getFoundRows(); -->
+	<select id="getFoundRows" resultType="long">
+		SELECT FOUND_ROWS();
+	</select>
+
+	
+		<!-- public List<MovieVO> listAllMovie(@Param("boardId") String boardId, @Param("paging") PagingDTO paging);  -->
+	<select id="listAllMovie" resultMap="rmMovieVO">
+		select SQL_CALC_FOUND_ROWS
+		p.*, w.id w_id, w.account_type w_account_type, w.name w_name, w.nick
+		w_nick, w.sex w_sex
+		from T_reply p LEFT OUTER JOIN T_user w
+		ON p.writer_id = w.id
+		where p.bb_id = #{boardId}
+		order by p.id desc
+		limit #{paging.limit} offset #{paging.offset};
+	</select>
+	
+
+	<!-- public List<MovieDTO> listGenreMovie(String genre); -->
+	<select id="listGenreMovie" resultMap="rmMovieDTO">
+	  select id, genre_names, title, popularity, release_date, overview, vote_average, vote_count
+		from T_tmdb_movie
+	   WHERE genre_names Like CONCAT('%', #{genre}, '%')
+	</select>
+
+
+	<!-- 영화 장르별 리스트 데이터 저장 -->
+	<insert id="saveMovie">
+		INSERT INTO T_tmdb_movie (adult, id, genre_names, title, popularity, release_date, overview, vote_average, vote_count)
+		VALUES (#{adult}, #{id}, #{genreNames}, #{title}, #{popularity}, #{releaseDate}, #{overview}, #{voteAverage}, #{voteCount})
+	</insert>
+	
+		<!-- public MovieDTO findById(String id); 영화상세정보 검색하는기능. --> 
+	<select id="findById" resultMap="rmMovieDTO">
+		select adult, id, genre_names, title, popularity, release_date, overview, vote_average, vote_count
+		from T_tmdb_movie
+		where id = #{id}
+	</select>
+	
+	<!-- 영화리스트에서 ID가 중복이 있는지 확인 -->
+	<select id="findByListId" resultType="boolean">
+		select count(1) = 0
+		from T_tmdb_movie
+		where id = #{id}
+	</select>
+
+	<!-- public List<MovieDTO> searchBymovieId(@Param("movieId") String movieId, 
+		@Param("arrSearch") String[] arrSearch, @Param("paging") PagingDTO paging); -->
+	<select id="searchBymovieId" resultMap="rmMovieDTO">
+		select m.*
+		  from T_tmdb_movie m
+		 WHERE <foreach item="title" collection="arrSearch" open="("
+				separator=", " close=")">
+				m.title like concat('%', #{title}, '%')
+			</foreach>
+		 order by m.title title;
+	</select>
+	
+		
+	<!-- public int addGenre(MovieGenreDTO movieGenreDTO); -->
+	<update id="addGenre">
+		update T_tmdb_movie
+		   set genre_names = CONCAT(genre_names, ', ', #{genreNames})
+		 where id = #{id}
+		   and genre_names not like CONCAT('%', #{genreNames}, '%')
+	</update>
+	
+
+	<!-- public List<MovieVO> searchByTfIdf(); -->
+	<select id="searchByTfIdf" resultMap="rmMovieVO">
+		SELECT *
+		from T_Movie
+	</select>
+
+	<!--public boolean findEvalId(String id); -->
+	<select id="findEvalId" resultType="boolean">
+		SELECT count(1) = 1
+		FROM T_Eval r
+		WHERE r.id = #{id};
+	</select>
+
+	<!-- List<MovieEvalVO> findByIdEval(String id); -->
+	<select id="findByIdEval" resultMap="rmMovieVO">
+		select r.*, w.id w_id, w.account_type w_account_type, w.name w_name,
+		w.nick w_nick, w.sex w_sex
+		from T_Eval r LEFT OUTER JOIN T_user w
+		ON r.writer_id = w.id
+		where r.id like CONCAT(#{id}, '%'); <!-- {id}로 시작하는 값 -->
+	</select>
+
+	<!-- public void incReadCnt(String id); -->
+	<update id="incReadCnt">
+		update T_Movie
+		set upt_dt = upt_dt,
+		read_cnt = read_cnt + 1
+		where id = #{id}
+	</update>
+
+	<!-- public List<MovieVO> searchAllMovies(String[] genreList, String[] ageLimitList); -->
+	<select id="searchAllMovies" resultMap="rmMovieVO">
+		select r.*, w.id w_id, w.account_type w_account_type, w.name w_name,
+		w.nick w_nick, w.birth w_birth, w.sex w_sex
+		from T_Movie r LEFT OUTER JOIN T_user w
+		ON r.writer_id = w.id
+		WHERE
+		<foreach item="genre" collection="genreList" open="("
+			separator=" or " close=")">
+			genre LIKE CONCAT('%',#{genre},'%')
+		</foreach>
+		and age_limit IN
+		<foreach item="ageLimit" collection="ageLimitList" open="("
+			separator=", " close=")">
+			#{ageLimit}
+		</foreach>
+	</select>
+	
+	<!-- public List<MovieVO> searchMovies(String[] genreList, String[] ageLimitList, 
+		String[] arrSearch);  -->
+	<select id="searchMovies" resultMap="rmMovieVO">
+		select r.*, w.id w_id, w.account_type w_account_type, w.name w_name,
+		w.nick w_nick, w.birth w_birth, w.sex w_sex
+		from T_Movie r LEFT OUTER JOIN T_user w
+		ON r.writer_id = w.id
+		WHERE
+		<foreach item="genre" collection="genreList" open="("
+			separator=" or " close=")">
+			genre LIKE CONCAT('%',#{genre},'%')
+		</foreach>
+		and age_limit IN
+		<foreach item="ageLimit" collection="ageLimitList" open="("
+			separator=", " close=")">
+			#{ageLimit}
+		</foreach>
+		and
+		<foreach item="search" collection="arrSearch" open="("
+			separator=" or " close=")">
+			title LIKE CONCAT('%', #{search},'%')
+		</foreach>
+	</select>
+
+	<!-- public int createMovie(MovieVO movie); -->
+	<insert id="createMovie">
+		<selectKey keyProperty="id" resultType="String"
+			order="BEFORE">
+			select NEXT_PK('s_movie')
+		</selectKey>
+		INSERT INTO T_Movie(id, descrim, writer_id, TITLE, content, bb_id, movie_id, 
+			genre, age_limit)
+		VALUES (#{id}, 'movie', #{writer.id}, #{title},
+			#{content}, #{boardVO.id}, #{movieDTO.id}, #{genre}, #{ageLimit});
+	</insert>
+	
+	<!-- public int createEval(@Param("parent") MovieEvalVO movie, @Param("eval") MovieEvalVO eval); -->
+	<insert id="createEval">
+		<selectKey keyProperty="eval.id" resultType="String"
+			order="BEFORE">
+			select CONCAT(#{parent.id}, #{reply.writer.id})
+		</selectKey>
+		INSERT INTO T_Eval(id, descrim, writer_id, content, star_score)
+		VALUES (#{eval.id}, 'eval', #{eval.writer.id}, #{eval.content},
+		#{eval.starScore});
+	</insert>
+	
+
+	<!-- public int updateMovie(MovieVO movie); -->
+	<update id="updateMovie">
+		update T_Movie
+		set TITLE = #{title},
+		content = #{content},
+		genre = #{genre},
+		age_limit = #{ageLimit}
+		where id = #{id}
+	</update>
+	
+		<!-- public int updateEval(MovieEvalVO eval); -->
+	<update id="updateEval">
+		update T_Eval
+		set content = #{content},
+		star_score = #{starScore}
+		where id = #{id}
+	</update>
+	
+
+	<!-- public int movieUpdateStarScore(String id); -->
+	<update id="movieUpdateStarScore">
+		update T_Movie
+		set star_score = (
+		select
+		round(avg(star_score),2)
+		from T_Eval
+		where id like CONCAT(#{id}, '%')
+		and descrim = 'eval'
+		)
+		where id = #{id}
+	</update>
+
+	<!-- public int deleteMoive(String id); -->
+	<delete id="deleteMoive">
+		delete from T_Movie
+		where id like CONCAT(#{id}, '%');
+	</delete>
+	
+		<!-- public int deleteEval(String id); -->
+	<delete id="deleteEval">
+		delete from T_Eval
+		where id = #{id}
+	</delete>
+</mapper>
